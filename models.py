@@ -69,7 +69,7 @@ class AccountAddress(Base):
 
     account = relationship('Account', back_populates='addresses')
 
-    API_DATA_FIELDS = [ coin, 'AccountAddress.address', 'AccountAddress.balance', 'AccountAddress.href' ]
+    API_DATA_FIELDS = [ coin, 'AccountAddress.address', 'AccountAddress.balance', 'AccountAddress.pending', 'AccountAddress.href' ]
 
     @property
     def _dbsession(self):
@@ -90,6 +90,10 @@ class AccountAddress(Base):
     @property
     def balance(self):
         return self.address_info.balance if self.address_info != None else 0.0
+
+    @property
+    def pending(self):
+        return self.address_info.pending if self.address_info != None else 0.0
 
     @property
     def href(self):

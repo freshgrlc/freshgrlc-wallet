@@ -1,0 +1,3 @@
+[submodule "indexer"]
+	path = indexer
+	url = ../freshgrlc-indexer

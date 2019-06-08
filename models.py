@@ -92,7 +92,7 @@ class WalletManager(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(64))
-    token = Column(Binary(AUTH_TOKEN_SIZE), unique=True)
+    tokenhash = Column(Binary(32), unique=True)
 
     accounts = relationship('Account', back_populates='manager', cascade='save-update, merge, delete')
 

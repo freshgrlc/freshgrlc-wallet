@@ -2,6 +2,7 @@ import functools
 
 from base64 import b64decode
 from flask import Flask, abort, request
+from hashlib import sha256
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.session import Session
@@ -32,8 +33,10 @@ def authenticate_manager(api_func):
         if len(token) != AUTH_TOKEN_SIZE:
             abort(401)
 
+        tokenhash = sha256(sha256(token).digest()).digest()
+
         dbsession = connectionmanager.database_session()
-        manager = dbsession.query(WalletManager).filter(WalletManager.token == token).first()
+        manager = dbsession.query(WalletManager).filter(WalletManager.tokenhash == tokenhash).first()
 
         if manager == None:
             abort(401)

@@ -28,6 +28,7 @@ CREATE TABLE `account` (
   `user` varchar(64) NOT NULL,
   `iv` binary(16) NOT NULL,
   `key` binary(32) NOT NULL,
+  `pubkeyhash` binary(20) NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `accountname` (`manager`,`user`),
   CONSTRAINT `fk_accountmanager` FOREIGN KEY (`manager`) REFERENCES `manager` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION

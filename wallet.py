@@ -2,9 +2,10 @@ from base64 import b64decode
 from binascii import hexlify, unhexlify
 from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import func
 
-from coininfo import COINS
+from coininfo import COINS, Coin
 from connections import connectionmanager
 from keyseeder import generate_key
 from models import *
@@ -65,6 +66,7 @@ class Wallet(object):
 
         privkey, pubkeyhash = generate_key()
         account.private_key = privkey
+        account.pubkeyhash = pubkeyhash
 
         db.add(account)
         db.flush()
@@ -94,14 +96,25 @@ class Wallet(object):
         return WalletAccount(self, account)
 
     @property
+    def _dbsession(self):
+        return Session.object_session(self.manager)
+
+    @property
     def accounts(self):
         return [ WalletAccount(self, account) for account in self.manager.accounts ]
+
+    def account(self, name):
+        account = self._dbsession.query(Account).filter(
+            Account.manager_id == self.manager.id,
+            Account.user == name
+        ).first()
+        return WalletAccount(self, account) if account != None else None
 
 
 class WalletAccount(object):
     def __init__(self, wallet, account):
         self.wallet = wallet
-        self.account = account
+        self.model = account
         self.addresses = {coin.ticker: WalletAddress(self, coin) for coin in COINS}
 
 
@@ -118,10 +131,14 @@ class WalletAddress(object):
             self._addresses = [ results[0] for results in self.db.query(
                 AccountAddress.address_id
             ).filter(
-                AccountAddress.account_id == self.account.account.id,
+                AccountAddress.account_id == self.account.model.id,
                 AccountAddress.coin == self.coin.ticker
             ).all() ]
         return self._addresses
+
+    @property
+    def preferred_address(self):
+        return self.coin.get_default_receive_address(self.account.model.pubkeyhash)
 
     def query_utxoset(self, colums, include_unconfirmed=False, include_immature=False):
         if include_unconfirmed and include_immature:
@@ -163,7 +180,7 @@ class WalletAddress(object):
                 TransactionInput.id == None,
                 or_(
                     CoinbaseInfo.block_id == None,
-                    Block.height <= self.current_coinbase_confirmation_height()
+                    Block.height <= self.coin.current_coinbase_confirmation_height()
                 )
             )
 
@@ -235,23 +252,25 @@ class WalletAddress(object):
             ).all()
         ]
 
-    def transaction(self, destination_address, amount, return_address, spend_unconfirmed=False, subsidized=False):
-        tx = UnsignedTransactionBuilder(feerate=(FEERATE_NETWORK if not subsidized else FEERATE_POOLSUBSIDY))
+    def transaction(self, destination_address, amount, return_address=None, spend_unconfirmed=False, subsidized=False):
+        if return_address is None:
+            return_address = self.preferred_address
+
+        tx = UnsignedTransactionBuilder(self.coin, feerate=(FEERATE_NETWORK if not subsidized or not self.coin.allow_tx_subsidy else FEERATE_POOLSUBSIDY))
         tx.add_output(destination_address, amount)
         tx.fund_transaction(self.utxos(include_unconfirmed=spend_unconfirmed), return_address)
         return self.sign_transaction(tx)
 
     def consolidate(self, destination_address, include_unconfirmed=False, subsidized=False):
-        tx = UnsignedTransactionBuilder(feerate=(FEERATE_NETWORK if not subsidized else FEERATE_POOLSUBSIDY))
+        tx = UnsignedTransactionBuilder(self.coin, feerate=(FEERATE_NETWORK if not subsidized or not self.coin.allow_tx_subsidy else FEERATE_POOLSUBSIDY))
 
         for utxo in self.utxos(include_unconfirmed=include_unconfirmed):
             tx.add(UnsignedTransactionInput(utxo))
 
         tx.add_return_output(destination_address)
-
         return self.sign_transaction(tx).broadcast(self.daemon())
 
     def sign_transaction(self, transaction):
         daemon = connectionmanager.coindaemon(self.coin)
-        raw_signed_transaction = unhexlify(daemon.sign_transaction(hexlify(transaction.raw()), [ self.account.account.private_key ]))
-        return SignedTransaction(transaction, raw_signed_transaction)
+        encoded_private_key = self.coin.encode_private_key(self.account.model.private_key)
+        return SignedTransaction(transaction, daemon.sign_transaction(hexlify(transaction.raw()), [ encoded_private_key ]), coindaemon=daemon)

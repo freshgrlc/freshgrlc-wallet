@@ -82,6 +82,6 @@ def encode_bech32_address(prefix, pubkeyhash):
 
 
 def encode_privkey(version, privkey, compressed_pubkey=True):
-    _assert_inputdata(version, pubkeyhash, 32, 'public key hash')
-    return b58encode(ord(version) + privkey + (ord(0x01) if compressed_pubkey else ''))
+    _assert_inputdata(version, privkey, 32, 'private key')
+    return b58encode(chr(version) + privkey + (chr(0x01) if compressed_pubkey else b''))
 

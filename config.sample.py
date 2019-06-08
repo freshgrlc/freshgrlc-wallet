@@ -14,8 +14,9 @@ GRLC = {
     'segwit_info': {
         'addresstype':      'base58',
         'address_version':  73,
-        'send_only':        True
-    }
+        'receive_only':     True
+    },
+    'allow_tx_subsidy':     False
 }
 
 
@@ -31,7 +32,8 @@ TGRLC = {
     },
     'address_version':      111,
     'privkey_version':      239,
-    'segwit_info':          None
+    'segwit_info':          None,
+    'allow_tx_subsidy':     False
 }
 
 
@@ -50,8 +52,9 @@ TUX = {
     'segwit_info': {
         'addresstype':      'bech32',
         'address_prefix':   'tux',
-        'send_only':        False
-    }
+        'receive_only':     False
+    },
+    'allow_tx_subsidy':     False
 }
 
 
@@ -65,7 +68,8 @@ KEYSEEDER = {
     },
     'address_version':      GRLC['address_version'],
     'privkey_version':      GRLC['privkey_version'],
-    'segwit_info':          None
+    'segwit_info':          None,
+    'allow_tx_subsidy':     False
 }
 
 
@@ -86,3 +90,4 @@ COINS = [ GRLC, TUX, TGRLC ]
 API_ENDPOINT = ''
 INDEXER_API_ENDPOINT = ''
 INDEXER_ADDRESS_API_PATH = '/address'
+INDEXER_TRANSACTION_API_PATH = '/transactions'

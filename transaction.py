@@ -94,7 +94,8 @@ class TransactionOutput(object):
 class UnsignedTransactionBuilder(object):
     VERSION = 2
 
-    def __init__(self, feerate=FEERATE_NETWORK):
+    def __init__(self, coin, feerate=FEERATE_NETWORK):
+        self.coin = coin
         self.inputs = []
         self.outputs = []
         self.feerate = feerate
@@ -127,12 +128,12 @@ class UnsignedTransactionBuilder(object):
             self.outputs.append(in_out)
 
     def add_output(self, address, amount):
-        decoded = Address(address)
-        self.add(TransactionOutput(decoded.rawhash, decoded.transaction_output_type(), amount))
+        pubkeyhash, output_type = self.coin.decode_address_and_type(address)
+        self.add(TransactionOutput(pubkeyhash, output_type, amount))
 
     def add_return_output(self, address):
-        decoded = Address(address)
-        return_tx = TransactionOutput(decoded.rawhash, decoded.transaction_output_type(), 0)
+        pubkeyhash, output_type = self.coin.decode_address_and_type(address)
+        return_tx = TransactionOutput(pubkeyhash, output_type, 0)
         self.add(return_tx)
         return_tx.set_amount(self.total_in() - self.total_out() - self.required_fee())
 
@@ -203,7 +204,7 @@ class UnsignedTransactionBuilder(object):
 
 
 class SignedTransaction(object):
-    def __init__(self, unsigned_tx_info, raw_signed_tx):
+    def __init__(self, unsigned_tx_info, raw_signed_tx, coindaemon=None):
         self.inputs = unsigned_tx_info.inputs
         self.outputs = unsigned_tx_info.outputs
         self.total_in = unsigned_tx_info.total_in()
@@ -215,7 +216,8 @@ class SignedTransaction(object):
         self.raw = unhexlify(raw_signed_tx)
         self.size = len(self.raw)
         self.actual_feerate = self.fee / self.size * 1000
+        self.coindaemon = coindaemon
 
-    def broadcast(self, coindaemon):
-        return coindaemon.sendrawtransaction(self.hex)
+    def broadcast(self, coindaemon=None):
+        return (coindaemon if coindaemon is not None else self.coindaemon).sendrawtransaction(self.hex)
 

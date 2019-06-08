@@ -1,17 +1,24 @@
 import functools
 
 from base64 import b64decode
+from binascii import unhexlify
 from flask import Flask, abort, request
 from hashlib import sha256
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.orm.session import Session
+from time import time
 
+from apiobjs import SendRequest, get_value
 from connections import connectionmanager
-from models import AUTH_TOKEN_SIZE, WalletManager, Account
+from models import AUTH_TOKEN_SIZE, WalletManager, Account, make_tx_ref
 from wallet import Wallet
 
+from indexer.models import Transaction
 from indexer.postprocessor import QueryDataPostProcessor
+
+
+class APIException(Exception):
+    pass
 
 
 webapp = Flask('wallet-api')
@@ -46,6 +53,22 @@ def authenticate_manager(api_func):
     return wrapper
 
 
+def walletapi(api_func):
+    @functools.wraps(api_func)
+    def wrapper(*args, **kwargs):
+        if 'manager' in kwargs:
+            kwargs['wallet'] = Wallet(kwargs['manager'])
+            if 'user' in kwargs:
+                account = kwargs['wallet'].account(kwargs['user'])
+                if account != None:
+                    kwargs['account'] = account
+                else:
+                    abort(404)
+
+        return api_func(*args, **kwargs)
+    return wrapper
+
+
 @webapp.route('/accounts/', methods=['GET'])
 @authenticate_manager
 def list_accounts(manager):
@@ -55,25 +78,57 @@ def list_accounts(manager):
 
 @webapp.route('/accounts/<user>/', methods=['GET'])
 @authenticate_manager
-def get_account(manager, user):
-    dbsession = Session.object_session(manager)
+@walletapi
+def get_account(manager, wallet, account, user):
     with QueryDataPostProcessor() as pp:
-        return pp.process(
-            dbsession.query(Account).filter(
-                Account.manager_id == manager.id,
-                Account.user == user
-            ).first()
-        ).json()
+        return pp.process(account.model).json()
+
+
+@webapp.route('/accounts/<user>/send/', methods=['POST'])
+@authenticate_manager
+@walletapi
+def send(manager, wallet, account, user):
+    requestobj = SendRequest(request.get_json())
+    sender = account.addresses[requestobj.coin]
+    requestobj.destination.set_context_info(wallet=wallet, coin=sender.coin)
+
+    tx = sender.transaction(requestobj.destination.address, requestobj.amount, spend_unconfirmed=True, subsidized=requestobj.low_priority)
+    txid = tx.broadcast()
+    txid_raw = unhexlify(txid)
+    sent = time()
+
+    db = connectionmanager.database_session(coin=sender.coin)
+    tx_internal_id = None
+
+    while time() < sent + 10:
+        db.rollback()
+        txobj = db.query(Transaction).filter(Transaction.txid == txid_raw).first()
+        if txobj != None:
+            tx_internal_id = txobj.id
+            break
+
+    if tx_internal_id is None:
+        raise APIException('Transaction created but not seen on network after 10 seconds')
+
+    with QueryDataPostProcessor() as pp:
+        return pp.process_raw({
+            'error': None,
+            'destination': dict(requestobj.destination),
+            'transaction': {
+                'txid': txid,
+                'href': make_tx_ref(sender.coin, txid)
+            }
+        }).json()
 
 
 @webapp.route('/accounts/', methods=['POST'])
 @authenticate_manager
-def create_account(manager):
-    user = request.get_json()['user']
-    wallet = Wallet(manager)
+@walletapi
+def create_account(manager, wallet):
+    user = get_value(request.get_json(), 'user')
     new_account = wallet.create_account(user)
 
     with QueryDataPostProcessor() as pp:
-        return pp.process(new_account.account).json()
+        return pp.process(new_account.model).json()
 
 

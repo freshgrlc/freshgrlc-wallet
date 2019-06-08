@@ -16,8 +16,16 @@ AUTH_TOKEN_SIZE = 64
 ACCOUNT_NAME_LEN = 64
 
 
-def make_address_href(addressbinding):
-    return '%s/%s%s/%s/' % (config.INDEXER_API_ENDPOINT, addressbinding.coin.lower(), config.INDEXER_ADDRESS_API_PATH, addressbinding.address_info.address)
+def make_indexer_ref(cointicker, object_name_path, object_id):
+    return '%s/%s%s/%s/' % (config.INDEXER_API_ENDPOINT, cointicker.lower(), object_name_path, object_id)
+
+
+def make_address_ref(addressbinding):
+    return make_indexer_ref(addressbinding.coin, config.INDEXER_ADDRESS_API_PATH, addressbinding.address_info.address)
+
+
+def make_tx_ref(coininfo, txid):
+    return make_indexer_ref(coininfo.ticker, config.INDEXER_TRANSACTION_API_PATH, txid)
 
 
 Base = declarative_base(metadata=MetaData(schema=config.DATABASE_WALLET_DB))
@@ -31,6 +39,7 @@ class Account(Base):
     user = Column(String(ACCOUNT_NAME_LEN))
     iv = Column(Binary(16))
     encrypted_key = Column('key', Binary(32))
+    pubkeyhash = Column(Binary(20))
 
     addresses = relationship('AccountAddress', back_populates='account', cascade='save-update, merge, delete')
     manager = relationship('WalletManager', back_populates='accounts')
@@ -84,7 +93,7 @@ class AccountAddress(Base):
 
     @property
     def href(self):
-        return make_address_href(self) if self.address_info != None else None
+        return make_address_ref(self) if self.address_info != None else None
 
 
 class WalletManager(Base):

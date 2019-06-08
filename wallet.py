@@ -47,7 +47,7 @@ class Wallet(object):
             return cls(manager)
 
     def create_account(self, name):
-        if type(name) != str or len(name.encode('utf-8')) > ACCOUNT_NAME_LEN:
+        if type(name) not in (str, unicode) or len(name.encode('utf-8')) > ACCOUNT_NAME_LEN:
             raise InvalidAccountName(name)
 
         db = connectionmanager.database_session()

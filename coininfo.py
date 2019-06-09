@@ -172,7 +172,7 @@ class Coin(object):
 
     @classmethod
     def by_ticker(cls, ticker):
-        return cls.get_by_filter(ticker, lambda coin: coin.ticker == ticker)
+        return cls.get_by_filter(ticker, lambda coin: coin.ticker.lower() == ticker.lower())
 
 
 def parse_coin_segwit_info(segwit_info):

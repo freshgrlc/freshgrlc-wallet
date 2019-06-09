@@ -1,12 +1,17 @@
 from decimal import Decimal
 
 from coininfo import COINS
+from models import AccountAutoConsolidationInfo
 
 
-def get_value(container, name, default=None):
-    if name in container and container[name] is not None:
+class _NoDefault(object): pass
+NoDefault = _NoDefault()
+
+
+def get_value(container, name, default=NoDefault):
+    if container is not None and name in container and container[name] is not None:
         return container[name]
-    if default is None:
+    if default == NoDefault:
         raise ValueError('Missing "%s"' % name)
     return default
 
@@ -106,3 +111,37 @@ class SendRequest(object):
     def low_priority(self):
         self.priority == 'low'
 
+
+class SetConsolidationInfoRequest(object):
+    def __init__(self, json):
+        self.address = str(get_value(json, 'address'))
+        self.minbalance = Decimal(get_value(json, 'minbalance'))
+        self.maxbalance = get_value(json, 'maxbalance', None)
+        self.interval = get_value(json, 'interval', None)
+        self.coin = None
+        self.account = None
+
+        if self.maxbalance is not None:
+            self.maxbalance = Decimal(self.maxbalance)
+        if self.interval is not None:
+            self.interval = Decimal(self.interval)
+
+        if self.maxbalance is None and self.interval is None:
+            raise ValueError('Consolidation settings require either a balance- or interval-based trigger. Use DELETE to disable consolidation')
+
+    def set_context_info(self, account, coin):
+        self.account = account
+        self.coin = coin
+
+        if not self.coin.valid_address(self.address):
+            raise ValueError('Invalid address "%s" for %s' % (self.address, self.coin.ticker))
+
+    def dbobject(self):
+        info = AccountAutoConsolidationInfo()
+        info.account_id = self.account.model.id
+        info.coin = self.coin.ticker
+        info.address = self.address
+        info.minbalance = self.minbalance
+        info.maxbalance = self.maxbalance
+        info.interval = self.interval
+        return info

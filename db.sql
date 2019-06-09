@@ -55,6 +55,28 @@ CREATE TABLE `addressbinding` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `autopay`
+--
+
+DROP TABLE IF EXISTS `autopay`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `autopay` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `account` int(11) NOT NULL,
+  `coin` varchar(5) NOT NULL,
+  `pubkeyhash` binary(20) NOT NULL,
+  `type` tinyint(4) NOT NULL,
+  `minbalance` decimal(16,8) NOT NULL DEFAULT '0.00000000',
+  `maxbalance` decimal(16,8) DEFAULT NULL,
+  `interval` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `autopay` (`account`,`coin`),
+  CONSTRAINT `fk_autopay_account` FOREIGN KEY (`account`) REFERENCES `account` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `manager`
 --
 
@@ -78,4 +100,4 @@ CREATE TABLE `manager` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2019-06-08 21:59:32
+-- Dump completed on 2019-06-09 22:21:33

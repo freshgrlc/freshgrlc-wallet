@@ -136,9 +136,20 @@ class WalletAddress(object):
             ).all() ]
         return self._addresses
 
+    def _preferred_address(self, forchange=False):
+        if not forchange:
+            consolidation_info = self.account.model.consolidationinfo_for(self.coin)
+            if consolidation_info != None and consolidation_info.isreceiveaddress:
+                return consolidation_info.address
+        return self.coin.get_default_receive_address(self.account.model.pubkeyhash)
+
     @property
     def preferred_address(self):
-        return self.coin.get_default_receive_address(self.account.model.pubkeyhash)
+        return self._preferred_address()
+
+    @property
+    def preferred_change_address(self):
+        return self._preferred_address(forchange=True)
 
     def query_utxoset(self, colums, include_unconfirmed=False, include_immature=False):
         if include_unconfirmed and include_immature:
@@ -254,14 +265,17 @@ class WalletAddress(object):
 
     def transaction(self, destination_address, amount, return_address=None, spend_unconfirmed=False, subsidized=False):
         if return_address is None:
-            return_address = self.preferred_address
+            return_address = self.preferred_change_address
 
         tx = UnsignedTransactionBuilder(self.coin, feerate=(FEERATE_NETWORK if not subsidized or not self.coin.allow_tx_subsidy else FEERATE_POOLSUBSIDY))
         tx.add_output(destination_address, amount)
         tx.fund_transaction(self.utxos(include_unconfirmed=spend_unconfirmed), return_address)
         return self.sign_transaction(tx)
 
-    def consolidate(self, destination_address, include_unconfirmed=False, subsidized=False):
+    def consolidate(self, destination_address=None, include_unconfirmed=False, subsidized=False):
+        if destination_address is None:
+            destination_address = self.preferred_change_address
+
         tx = UnsignedTransactionBuilder(self.coin, feerate=(FEERATE_NETWORK if not subsidized or not self.coin.allow_tx_subsidy else FEERATE_POOLSUBSIDY))
 
         for utxo in self.utxos(include_unconfirmed=include_unconfirmed):

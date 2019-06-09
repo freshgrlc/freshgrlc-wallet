@@ -2,14 +2,15 @@ import os
 
 from binascii import unhexlify
 from Crypto.Cipher import AES
-from sqlalchemy import Binary, Column, ForeignKey, Integer, MetaData, String
-from sqlalchemy.orm import relationship
+from sqlalchemy import Binary, Column, Float, ForeignKey, Integer, MetaData, String
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
+from sqlalchemy.orm.session import Session
 
 import config
-from coininfo import Coin
+from coininfo import Coin, COINS
 from connections import connectionmanager
-from indexer.models import Address
+from indexer.models import Address, TXOUT_TYPES
 
 
 AUTH_TOKEN_SIZE = 64
@@ -42,6 +43,7 @@ class Account(Base):
     pubkeyhash = Column(Binary(20))
 
     addresses = relationship('AccountAddress', back_populates='account', cascade='save-update, merge, delete')
+    _consolidationinfo = relationship('AccountAutoConsolidationInfo', back_populates='account', cascade='save-update, merge, delete')
     manager = relationship('WalletManager', back_populates='accounts')
 
     @property
@@ -55,7 +57,22 @@ class Account(Base):
         cipher = AES.new(unhexlify(config.ENCRYPTION_KEY), AES.MODE_CBC, self.iv)
         self.encrypted_key = cipher.encrypt(value)
 
-    API_DATA_FIELDS = [ user ]
+    @property
+    def consolidationinfo(self):
+        consolidationinfo = { coin.ticker: None for coin in COINS }
+        for info in self._consolidationinfo:
+            consolidationinfo[info.coin] = info
+        return consolidationinfo
+
+    def consolidationinfo_for(self, coin):
+        return Session.object_session(self).query(
+            AccountAutoConsolidationInfo
+        ).filter(
+            AccountAutoConsolidationInfo.account_id == self.id,
+            AccountAutoConsolidationInfo.coin == coin.ticker
+        ).first()
+
+    API_DATA_FIELDS = [ user, 'Account.consolidationinfo' ]
     POSTPROCESS_RESOLVE_FOREIGN_KEYS = [ addresses ]
 
 
@@ -98,6 +115,59 @@ class AccountAddress(Base):
     @property
     def href(self):
         return make_address_ref(self) if self.address_info != None else None
+
+    @property
+    def consolidationinfo(self):
+        return Session.object_session(self).query(
+            AccountAutoConsolidationInfo
+        ).filter(
+            AccountAutoConsolidationInfo.account_id == self.account_id,
+            AccountAutoConsolidationInfo.coin == self.coin
+        ).first()
+
+
+class AccountAutoConsolidationInfo(Base):
+    __tablename__ = 'autopay'
+
+    id = Column(Integer, primary_key=True)
+    account_id = Column('account', Integer, ForeignKey('account.id'))
+    coin = Column(String(5))
+    pubkeyhash = Column(Binary(20))
+    txout_type_id = Column('type', Integer)
+    minbalance = Column(Float(asdecimal=True))
+    maxbalance = Column(Float(asdecimal=True))
+    interval = Column(Integer)
+
+    account = relationship('Account', back_populates='_consolidationinfo')
+
+    API_DATA_FIELDS = [
+        'AccountAutoConsolidationInfo.address', 'AccountAutoConsolidationInfo.isreceiveaddress',
+        minbalance, maxbalance, interval
+    ]
+
+    @property
+    def txout_type(self):
+        return TXOUT_TYPES.resolve(self.txout_type_id)
+
+    @txout_type.setter
+    def txout_type(self, txout_type):
+        self.txout_type_id = TXOUT_TYPES.internal_id(txout_type)
+
+    @property
+    def address(self):
+        return Coin.by_ticker(self.coin).encode_address(self.pubkeyhash, self.txout_type)
+
+    @address.setter
+    def address(self, address):
+        hash, txout_type = Coin.by_ticker(self.coin).decode_address_and_type(address)
+        if hash is None:
+            raise ValueError('Cannot decode address %s for coin %s' % (address, self.coin))
+        self.pubkeyhash = hash
+        self.txout_type = txout_type
+
+    @property
+    def isreceiveaddress(self):
+        return self.maxbalance == 0.0
 
 
 class WalletManager(Base):

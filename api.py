@@ -4,11 +4,13 @@ from base64 import b64decode
 from binascii import unhexlify
 from flask import Flask, abort, request
 from hashlib import sha256
+from httplib import NOT_FOUND, NO_CONTENT
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from time import time
 
-from apiobjs import SendRequest, get_value
+from apiobjs import SendRequest, SetConsolidationInfoRequest, get_value
+from coininfo import Coin, CoinNotDefinedException
 from connections import connectionmanager
 from models import AUTH_TOKEN_SIZE, WalletManager, Account, make_tx_ref
 from wallet import Wallet
@@ -82,6 +84,72 @@ def list_accounts(manager):
 def get_account(manager, wallet, account, user):
     with QueryDataPostProcessor() as pp:
         return pp.process(account.model).json()
+
+
+@webapp.route('/accounts/<user>/consolidationinfo/', methods=['GET'])
+@authenticate_manager
+@walletapi
+def get_account_consolidationinfo(manager, wallet, account, user):
+    with QueryDataPostProcessor() as pp:
+        return pp.process(account.model.consolidationinfo).json()
+
+
+@webapp.route('/accounts/<user>/consolidationinfo/<coin>/', methods=['GET'])
+@authenticate_manager
+@walletapi
+def get_account_coin_consolidationinfo(manager, wallet, account, user, coin):
+    with QueryDataPostProcessor() as pp:
+        try:
+            coin = Coin.by_ticker(coin)
+        except CoinNotDefinedException:
+            return pp.process_raw(None).json()
+        return pp.process(account.model.consolidationinfo_for(coin)).json()
+
+
+@webapp.route('/accounts/<user>/consolidationinfo/<coin>/', methods=['DELETE'])
+@authenticate_manager
+@walletapi
+def delete_account_coin_consolidationinfo(manager, wallet, account, user, coin):
+    try:
+        coin = Coin.by_ticker(coin)
+    except CoinNotDefinedException:
+        return '', NO_CONTENT
+
+    current_value = account.model.consolidationinfo_for(coin)
+    if current_value == None:
+        return '', NO_CONTENT
+
+    db = wallet._dbsession
+    db.delete(current_value)
+    db.commit()
+    return '', NO_CONTENT
+
+
+@webapp.route('/accounts/<user>/consolidationinfo/<coin>/', methods=['PUT'])
+@authenticate_manager
+@walletapi
+def set_account_coin_consolidationinfo(manager, wallet, account, user, coin):
+    try:
+        coin = Coin.by_ticker(coin)
+    except CoinNotDefinedException:
+        return '', NOT_FOUND
+
+    requestobj = SetConsolidationInfoRequest(request.get_json())
+    requestobj.set_context_info(account=account, coin=coin)
+
+    db = wallet._dbsession
+
+    current_value = account.model.consolidationinfo_for(coin)
+    if current_value != None:
+        db.delete(current_value)
+        db.flush()
+
+    consolidationinfo = requestobj.dbobject()
+    db.add(consolidationinfo)
+    db.commit()
+
+    with QueryDataPostProcessor() as pp:
+        return pp.process(consolidationinfo).json()
 
 
 @webapp.route('/accounts/<user>/send/', methods=['POST'])

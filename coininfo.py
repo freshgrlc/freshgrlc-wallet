@@ -66,13 +66,14 @@ SEGWIT_CONVERTERS = {
 class Coin(object):
     coins = []
 
-    def __init__(self, name, ticker, database_name, rpc_host, rpc_port, address_version, privkey_version, segwit_converter, allow_tx_subsidy, register=True):
+    def __init__(self, name, ticker, database_name, rpc_host, rpc_port, address_version, p2sh_address_version, privkey_version, segwit_converter, allow_tx_subsidy, register=True):
         self.name = name
         self.ticker = ticker
         self.db_table = database_name
         self.rpc_host = rpc_host
         self.rpc_port = rpc_port
         self.address_version = address_version
+        self.p2sh_address_version = p2sh_address_version
         self.privkey_version = privkey_version
         self.segwit_converter = segwit_converter
         self.allow_tx_subsidy = allow_tx_subsidy
@@ -121,6 +122,12 @@ class Coin(object):
             pass
 
         try:
+            _, scripthash = decode_base58_address(address, verify_version=self.p2sh_address_version)
+            return scripthash, TXOUT_TYPES.P2SH
+        except ValueError:
+            pass
+
+        try:
             if self.segwit_converter is not None:
                 _, pubkeyhash = self.segwit_converter.decode_address(address)
                 return pubkeyhash, TXOUT_TYPES.P2WPKH
@@ -164,6 +171,7 @@ def make_coin(info, register=True):
         rpc_host=info['coindaemon']['hostname'],
         rpc_port=info['coindaemon']['port'],
         address_version=info['address_version'],
+        p2sh_address_version=info['p2sh_address_version'],
         privkey_version=info['privkey_version'],
         segwit_converter=parse_coin_segwit_info(info['segwit_info']),
         allow_tx_subsidy=info['allow_tx_subsidy'],

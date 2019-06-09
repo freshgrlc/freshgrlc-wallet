@@ -10,6 +10,7 @@ GRLC = {
         'port':             42068
     },
     'address_version':      38,
+    'p2sh_address_version': 50,
     'privkey_version':      176,
     'segwit_info': {
         'addresstype':      'base58',
@@ -31,6 +32,7 @@ TGRLC = {
         'port':             42070
     },
     'address_version':      111,
+    'p2sh_address_version': 58,
     'privkey_version':      239,
     'segwit_info':          None,
     'allow_tx_subsidy':     False
@@ -48,6 +50,7 @@ TUX = {
         'port':             42072
     },
     'address_version':      65,
+    'p2sh_address_version': 64,
     'privkey_version':      193,
     'segwit_info': {
         'addresstype':      'bech32',
@@ -67,6 +70,7 @@ KEYSEEDER = {
         'port':             GRLC['coindaemon']['port']
     },
     'address_version':      GRLC['address_version'],
+    'p2sh_address_version': GRLC['p2sh_address_version'],
     'privkey_version':      GRLC['privkey_version'],
     'segwit_info':          None,
     'allow_tx_subsidy':     False

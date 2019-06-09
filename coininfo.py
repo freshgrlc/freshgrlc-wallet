@@ -1,3 +1,5 @@
+from binascii import hexlify
+
 from codec import decode_base58_address, encode_base58_address, decode_bech32_address, encode_bech32_address, encode_privkey
 
 import config
@@ -5,6 +7,10 @@ from indexer.models import Block, TXOUT_TYPES
 
 
 class CoinNotDefinedException(Exception):
+    pass
+
+
+class InvalidTransactionOutputType(Exception):
     pass
 
 
@@ -94,6 +100,9 @@ class Coin(object):
     def get_segwit_address(self, pubkeyhash):
         return self.segwit_converter.encode_segwit_address(pubkeyhash) if self.segwit_converter is not None else None
 
+    def get_p2sh_address(self, scripthash):
+        return encode_base58_address(self.p2sh_address_version, scripthash)
+
     def get_addresses_for_pubkeyhash(self, pubkeyhash):
         addresses = [ self.get_legacy_address(pubkeyhash) ]
         if self.has_separate_segwit_address:
@@ -135,6 +144,17 @@ class Coin(object):
             pass
 
         return None, None
+
+    def encode_address(self, hash, txout_type):
+        if txout_type == TXOUT_TYPES.P2PKH:
+            return self.get_legacy_address(hash)
+        if txout_type == TXOUT_TYPES.P2WPKH:
+            if self.segwit_converter is not None:
+                return self.get_segwit_address(hash)
+            raise InvalidTransactionOutputType('Cannot encode hash "%s" to p2wpkh address: Segwit not enabled on network for %s' % (hexlify(hash), self.ticker))
+        if txout_type == TXOUT_TYPES.P2SH:
+            return self.get_p2sh_address(hash)
+        raise NotImplementedError('Output type %s not supported' % txout_type)
 
     def encode_private_key(self, raw_privkey):
         return encode_privkey(self.privkey_version, raw_privkey)

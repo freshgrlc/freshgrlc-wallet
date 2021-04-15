@@ -59,6 +59,7 @@ def run_background_tasks_for_coin(coin, dbsession, max_work=MAX_QUEUED_TXS):
         isouter=True
     ).filter(
         AccountAddress.coin == coin.ticker,
+        TransactionOutput.spentby_id == None,
         TransactionInput.id == None,
         or_(
             CoinbaseInfo.block_id == None,

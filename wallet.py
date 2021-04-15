@@ -192,6 +192,7 @@ class WalletAddress(object):
                     isouter=True
                 ).filter(
                     Address.id.in_(self.address_ids),
+                    TransactionOutput.spentby_id == None,
                     TransactionInput.id == None,
                     or_(
                         BlockTransaction.block_id == None,
@@ -217,6 +218,7 @@ class WalletAddress(object):
                     isouter=True
                 ).filter(
                     Address.id.in_(self.address_ids),
+                    TransactionOutput.spentby_id == None,
                     TransactionInput.id == None,
                     or_(
                         CoinbaseInfo.block_id == None,
@@ -241,6 +243,7 @@ class WalletAddress(object):
                 isouter=True
             ).filter(
                 Address.id.in_(self.address_ids),
+                TransactionOutput.spentby_id == None,
                 TransactionInput.id == None,
                 Transaction.confirmation != None,
                 or_(

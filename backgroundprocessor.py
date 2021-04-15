@@ -1,6 +1,6 @@
 from binascii import hexlify
 from datetime import datetime, timedelta
-from sqlalchemy import func as sqlfunc
+from sqlalchemy import func as sqlfunc, or_
 from time import sleep
 
 from coininfo import COINS
@@ -9,7 +9,7 @@ from models import Account, AccountAddress
 from wallet import WalletAccount, MIN_CONSOLIDATION_UTXOS, MAX_CONSOLIDATION_UTXOS
 
 from indexer.logger import log_event
-from indexer.models import Address, Block, TransactionInput, TransactionOutput
+from indexer.models import Address, Block, CoinbaseInfo, Transaction, TransactionInput, TransactionOutput
 
 
 MAX_QUEUED_TXS = 8
@@ -47,11 +47,23 @@ def run_background_tasks_for_coin(coin, dbsession, max_work=MAX_QUEUED_TXS):
         Address.id == TransactionOutput.address_id,
         isouter=True
     ).join(
+        TransactionOutput.transaction
+    ).join(
         TransactionOutput.spenders,
+        isouter=True
+    ).join(
+        Transaction.coinbaseinfo,
+        isouter=True
+    ).join(
+        CoinbaseInfo.block,
         isouter=True
     ).filter(
         AccountAddress.coin == coin.ticker,
         TransactionInput.id == None,
+        or_(
+            CoinbaseInfo.block_id == None,
+            Block.height <= coin.current_coinbase_confirmation_height()
+        )
     ).group_by(Address.id).having(
         sqlfunc.count(TransactionOutput.id) >= MIN_CONSOLIDATION_UTXOS
     ).all():

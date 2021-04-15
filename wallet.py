@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import func
 
+from codec import decode_base58_address, decode_privkey
 from coininfo import COINS, Coin
 from connections import connectionmanager
 from keyseeder import generate_key
@@ -47,7 +48,7 @@ class Wallet(object):
         if manager != None:
             return cls(manager)
 
-    def create_account(self, name):
+    def create_or_import_account(self, name, get_key_cb):
         if type(name) not in (str, unicode) or len(name.encode('utf-8')) > ACCOUNT_NAME_LEN:
             raise InvalidAccountName(name)
 
@@ -64,7 +65,7 @@ class Wallet(object):
         account.manager_id = self.manager.id
         account.user = name
 
-        privkey, pubkeyhash = generate_key()
+        privkey, pubkeyhash = get_key_cb()
         account.private_key = privkey
         account.pubkeyhash = pubkeyhash
 
@@ -94,6 +95,22 @@ class Wallet(object):
         db.flush()
         db.commit()
         return WalletAccount(self, account)
+
+    def create_account(self, name):
+        return self.create_or_import_account(name, generate_key)
+
+    def import_account(self, name, address):
+        def decode(privkey, address):
+            for coin in COINS:
+                try:
+                    _, pubkeyhash = decode_base58_address(address.encode('utf-8'), verify_version=coin.address_version)
+                    _, privkey, _ = decode_privkey(privkey.encode('utf-8'), verify_version=coin.privkey_version)
+                    return privkey, pubkeyhash
+                except ValueError:
+                    continue
+            raise ValueError('Could not decode address or private key')
+
+        return self.create_or_import_account(name, lambda: decode(*address))
 
     @property
     def _dbsession(self):
@@ -256,7 +273,7 @@ class WalletAddress(object):
                     Address.address,
                     Transaction.txid,
                     TransactionOutput.index,
-                    TransactionOutput.type,
+                    TransactionOutput.type_id,
                     TransactionOutput.amount
                 ),
                 include_unconfirmed=include_unconfirmed

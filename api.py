@@ -194,7 +194,16 @@ def send(manager, wallet, account, user):
 @walletapi
 def create_account(manager, wallet):
     user = get_value(request.get_json(), 'user')
-    new_account = wallet.create_account(user)
+
+    try:
+        address = get_value(request.get_json(), 'privkey'), get_value(request.get_json(), 'address')
+    except ValueError:
+        address = None
+
+    if address is None:
+        new_account = wallet.create_account(user)
+    else:
+        new_account = wallet.import_account(user, address)
 
     with QueryDataPostProcessor() as pp:
         return pp.process(new_account.model).json()

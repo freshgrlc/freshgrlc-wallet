@@ -15,6 +15,10 @@ from indexer import import_address
 from indexer.models import *
 
 
+MIN_CONSOLIDATION_UTXOS = 100
+MAX_CONSOLIDATION_UTXOS = 650
+
+
 TXIN_VSIZES = {
     TXOUT_TYPES.P2PKH:  149,
     TXOUT_TYPES.P2WPKH: 68
@@ -168,29 +172,61 @@ class WalletAddress(object):
     def preferred_change_address(self):
         return self._preferred_address(forchange=True)
 
-    def query_utxoset(self, colums, include_unconfirmed=False, include_immature=False):
+    def daemon(self):
+        return connectionmanager.coindaemon(self.coin)
+
+    def query_utxoset(self, colums, include_unconfirmed=False, include_immature=False, max_utxos=None):
+        do_limit_utxos = lambda x: x if max_utxos is None else x.order_by(TransactionOutput.id).limit(max_utxos)
+
         if include_unconfirmed and include_immature:
-            return self.db.query(*colums).join(
-                Address
-            ).join(
-                TransactionOutput.transaction
-            ).join(
-                TransactionOutput.spenders,
-                isouter=True
-            ).join(
-                Transaction.blockreferences,
-                isouter=True
-            ).filter(
-                Address.id.in_(self.address_ids),
-                TransactionInput.id == None,
-                or_(
-                    BlockTransaction.block_id == None,
-                    Transaction.confirmation_id != None
+            return do_limit_utxos(
+                self.db.query(*colums).join(
+                    Address
+                ).join(
+                    TransactionOutput.transaction
+                ).join(
+                    TransactionOutput.spenders,
+                    isouter=True
+                ).join(
+                    Transaction.blockreferences,
+                    isouter=True
+                ).filter(
+                    Address.id.in_(self.address_ids),
+                    TransactionInput.id == None,
+                    or_(
+                        BlockTransaction.block_id == None,
+                        Transaction.confirmation_id != None
+                    )
                 )
             )
 
         if include_unconfirmed:
-            return self.db.query(*colums).join(
+            return do_limit_utxos(
+                self.db.query(*colums).join(
+                    Address
+                ).join(
+                    TransactionOutput.transaction
+                ).join(
+                    TransactionOutput.spenders,
+                    isouter=True
+                ).join(
+                    Transaction.coinbaseinfo,
+                    isouter=True
+                ).join(
+                    CoinbaseInfo.block,
+                    isouter=True
+                ).filter(
+                    Address.id.in_(self.address_ids),
+                    TransactionInput.id == None,
+                    or_(
+                        CoinbaseInfo.block_id == None,
+                        Block.height <= self.coin.current_coinbase_confirmation_height()
+                    )
+                )
+            )
+
+        return do_limit_utxos(
+            self.db.query(*colums).join(
                 Address
             ).join(
                 TransactionOutput.transaction
@@ -206,32 +242,11 @@ class WalletAddress(object):
             ).filter(
                 Address.id.in_(self.address_ids),
                 TransactionInput.id == None,
+                Transaction.confirmation != None,
                 or_(
                     CoinbaseInfo.block_id == None,
                     Block.height <= self.coin.current_coinbase_confirmation_height()
                 )
-            )
-
-        return self.db.query(*colums).join(
-            Address
-        ).join(
-            TransactionOutput.transaction
-        ).join(
-            TransactionOutput.spenders,
-            isouter=True
-        ).join(
-            Transaction.coinbaseinfo,
-            isouter=True
-        ).join(
-            CoinbaseInfo.block,
-            isouter=True
-        ).filter(
-            Address.id.in_(self.address_ids),
-            TransactionInput.id == None,
-            Transaction.confirmation != None,
-            or_(
-                CoinbaseInfo.block_id == None,
-                Block.height <= self.current_coinbase_confirmation_height()
             )
         )
 
@@ -258,7 +273,7 @@ class WalletAddress(object):
 
         return { address: { 'balance': balance, 'utxos': utxos } for utxos, balance, address in results }
 
-    def utxos(self, include_unconfirmed=False):
+    def utxos(self, include_unconfirmed=False, max_utxos=None):
         return [{
                 'txid':         hexlify(txid),
                 'vout':         int(vout),
@@ -276,7 +291,8 @@ class WalletAddress(object):
                     TransactionOutput.type_id,
                     TransactionOutput.amount
                 ),
-                include_unconfirmed=include_unconfirmed
+                include_unconfirmed=include_unconfirmed,
+                max_utxos=max_utxos
             ).all()
         ]
 
@@ -289,19 +305,19 @@ class WalletAddress(object):
         tx.fund_transaction(self.utxos(include_unconfirmed=spend_unconfirmed), return_address)
         return self.sign_transaction(tx)
 
-    def consolidate(self, destination_address=None, include_unconfirmed=False, subsidized=False):
+    def consolidate(self, destination_address=None, include_unconfirmed=False, subsidized=False, max_utxos=MAX_CONSOLIDATION_UTXOS):
         if destination_address is None:
             destination_address = self.preferred_change_address
 
         tx = UnsignedTransactionBuilder(self.coin, feerate=(FEERATE_NETWORK if not subsidized or not self.coin.allow_tx_subsidy else FEERATE_POOLSUBSIDY))
 
-        for utxo in self.utxos(include_unconfirmed=include_unconfirmed):
+        for utxo in self.utxos(include_unconfirmed=include_unconfirmed, max_utxos=max_utxos):
             tx.add(UnsignedTransactionInput(utxo))
 
         tx.add_return_output(destination_address)
-        return self.sign_transaction(tx).broadcast(self.daemon())
+        return self.sign_transaction(tx).broadcast()
 
     def sign_transaction(self, transaction):
-        daemon = connectionmanager.coindaemon(self.coin)
+        daemon = self.daemon()
         encoded_private_key = self.coin.encode_private_key(self.account.model.private_key)
         return SignedTransaction(transaction, daemon.sign_transaction(hexlify(transaction.raw()), [ encoded_private_key ]), coindaemon=daemon)

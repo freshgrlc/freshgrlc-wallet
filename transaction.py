@@ -29,10 +29,10 @@ def encode_varint(i):
     if i < 0xfd:
         return pack('B', i)
     if i < 0x10000:
-        return pack('BH', 0xfd, i)
+        return pack('<BH', 0xfd, i)
     if i < 0x100000000:
-        return pack('BI', 0xfe, i)
-    return pack('BQ', 0xff, i)
+        return pack('<BI', 0xfe, i)
+    return pack('<BQ', 0xff, i)
 
 def encode_int(i):
     return pack('I', i)

@@ -2,7 +2,7 @@ import os
 
 from binascii import unhexlify
 from Crypto.Cipher import AES
-from sqlalchemy import Binary, Column, Float, ForeignKey, Integer, MetaData, String
+from sqlalchemy import BINARY as Binary, Column, Float, ForeignKey, Integer, MetaData, String
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session

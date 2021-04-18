@@ -200,10 +200,12 @@ def create_account(manager, wallet):
     except ValueError:
         address = None
 
+    db_session = connectionmanager.database_session()
+
     if address is None:
-        new_account = wallet.create_account(user)
+        new_account = wallet.create_account(user, db_session=db_session)
     else:
-        new_account = wallet.import_account(user, address)
+        new_account = wallet.import_account(user, address, db_session=db_session)
 
     with QueryDataPostProcessor() as pp:
         return pp.process(new_account.model).json()

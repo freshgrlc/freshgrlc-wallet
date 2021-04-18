@@ -52,11 +52,11 @@ class Wallet(object):
         if manager != None:
             return cls(manager)
 
-    def create_or_import_account(self, name, get_key_cb):
+    def create_or_import_account(self, name, get_key_cb, db_session=None):
         if type(name) not in (str, unicode) or len(name.encode('utf-8')) > ACCOUNT_NAME_LEN:
             raise InvalidAccountName(name)
 
-        db = connectionmanager.database_session()
+        db = db_session if db_session is not None else connectionmanager.database_session()
         existing_account = db.query(Account).filter(
             Account.manager_id == self.manager.id,
             Account.user == name
@@ -100,10 +100,10 @@ class Wallet(object):
         db.commit()
         return WalletAccount(self, account)
 
-    def create_account(self, name):
-        return self.create_or_import_account(name, generate_key)
+    def create_account(self, name, db_session=None):
+        return self.create_or_import_account(name, generate_key, db_session=db_session)
 
-    def import_account(self, name, address):
+    def import_account(self, name, address, db_session=None):
         def decode(privkey, address):
             for coin in COINS:
                 try:
@@ -114,7 +114,7 @@ class Wallet(object):
                     continue
             raise ValueError('Could not decode address or private key')
 
-        return self.create_or_import_account(name, lambda: decode(*address))
+        return self.create_or_import_account(name, lambda: decode(*address), db_session=db_session)
 
     @property
     def _dbsession(self):

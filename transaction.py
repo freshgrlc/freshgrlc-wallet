@@ -2,9 +2,10 @@ from binascii import unhexlify
 from decimal import Decimal
 from struct import pack
 
+from coinsupport.opcodes import *
+
 from indexer.models import TXOUT_TYPES
 
-from opcodes import *
 
 FEERATE_NETWORK = Decimal('0.001')
 FEERATE_POOLSUBSIDY = Decimal('0.00005')

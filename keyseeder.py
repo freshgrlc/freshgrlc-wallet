@@ -1,5 +1,6 @@
+from coinsupport.addresscodecs import decode_base58_address, decode_privkey
+
 import config
-from codec import decode_base58_address, decode_privkey
 from coininfo import KEYSEEDER_INFO
 from connections import connectionmanager
 

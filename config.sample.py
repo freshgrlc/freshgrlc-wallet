@@ -1,64 +1,17 @@
-
-GRLC = {
-    'name':                 'Garlicoin',
-    'ticker':               'GRLC',
-    'database': {
-        'name':             'grlc'
-    },
-    'coindaemon': {
-        'hostname':         'garlicoind',
-        'port':             42068
-    },
-    'address_version':      38,
-    'p2sh_address_version': 50,
-    'privkey_version':      176,
-    'segwit_info': {
-        'addresstype':      'base58',
-        'address_version':  73,
-        'receive_only':     True
-    },
-    'allow_tx_subsidy':     False
-}
+from coinsupport.coins import GRLC, TGRLC, TUX
 
 
-TGRLC = {
-    'name':                 'Garlicoin Testnet',
-    'ticker':               'tGRLC',
-    'database': {
-        'name':             'tgrlc'
-    },
-    'coindaemon': {
-        'hostname':         'garlicoind-testnet',
-        'port':             42070
-    },
-    'address_version':      111,
-    'p2sh_address_version': 58,
-    'privkey_version':      239,
-    'segwit_info':          None,
-    'allow_tx_subsidy':     False
-}
+GRLC['database']['name'] = 'grlc'
+GRLC['coindaemon']['hostname'] = '172.0.0.1'
+GRLC['allow_tx_subsidy'] = False
 
+TGRLC['database']['name'] = 'tgrlc'
+TGRLC['coindaemon']['hostname'] = '172.0.0.1'
+TGRLC['allow_tx_subsidy'] = False
 
-TUX = {
-    'name':                 'Tuxcoin',
-    'ticker':               'TUX',
-    'database': {
-        'name':             'tux'
-    },
-    'coindaemon': {
-        'hostname':         'tuxcoind',
-        'port':             42072
-    },
-    'address_version':      65,
-    'p2sh_address_version': 64,
-    'privkey_version':      193,
-    'segwit_info': {
-        'addresstype':      'bech32',
-        'address_prefix':   'tux',
-        'receive_only':     False
-    },
-    'allow_tx_subsidy':     False
-}
+TUX['database']['name'] = 'tux'
+TUX['coindaemon']['hostname'] = '172.0.0.1'
+TUX['allow_tx_subsidy'] = False
 
 
 KEYSEEDER = {

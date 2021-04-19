@@ -1,9 +1,10 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from coinsupport import Daemon
+
 import config
 from coininfo import KEYSEEDER_INFO
-from indexer.coindaemon import Daemon
 
 
 class ConnectionManager(object):

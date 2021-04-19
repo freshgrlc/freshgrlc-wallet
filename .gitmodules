@@ -1,3 +1,6 @@
 [submodule "indexer"]
 	path = indexer
 	url = ../freshgrlc-indexer
+[submodule "coinsupport"]
+	path = coinsupport
+	url = ../freshgrlc-coinsupport-python

@@ -5,7 +5,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import func
 
-from codec import decode_base58_address, decode_privkey
+from coinsupport.addresscodecs import decode_base58_address, decode_privkey
+
 from coininfo import COINS, Coin
 from connections import connectionmanager
 from keyseeder import generate_key

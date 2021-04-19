@@ -3,3 +3,9 @@
 .kdev4/
 config.py
 
+# VirtualEnv
+bin/
+include/
+lib/
+lib64/
+pyvenv.cfg

@@ -1,15 +1,15 @@
 from coinsupport.coins import GRLC, TGRLC, TUX
 
 
-GRLC['database']['name'] = 'grlc'
+GRLC['database'] = { 'name': 'grlc' }
 GRLC['coindaemon']['hostname'] = '172.0.0.1'
 GRLC['allow_tx_subsidy'] = False
 
-TGRLC['database']['name'] = 'tgrlc'
+TGRLC['database'] = { 'name': 'tgrlc' }
 TGRLC['coindaemon']['hostname'] = '172.0.0.1'
 TGRLC['allow_tx_subsidy'] = False
 
-TUX['database']['name'] = 'tux'
+TUX['database'] = { 'name': 'tux' }
 TUX['coindaemon']['hostname'] = '172.0.0.1'
 TUX['allow_tx_subsidy'] = False
 

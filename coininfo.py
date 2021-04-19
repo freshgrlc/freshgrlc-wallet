@@ -126,7 +126,7 @@ def parse_coin_segwit_info(segwit_info):
         return None
     if 'addresstype' not in segwit_info:
         raise ValueError('No segwit address type info available or unexpect address type: %s' % segwit_info['addresstype'] if 'addresstype' in segwit_info else None)
-    return get_converter_factory_for_address_type[segwit_info['addresstype']](**segwit_info)
+    return get_converter_factory_for_address_type(segwit_info['addresstype'])(**segwit_info)
 
 
 def make_coin(info, register=True):

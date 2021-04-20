@@ -196,16 +196,16 @@ def create_account(manager, wallet):
     user = get_value(request.get_json(), 'user')
 
     try:
-        address = get_value(request.get_json(), 'privkey'), get_value(request.get_json(), 'address')
+        private_key = get_value(request.get_json(), 'privkey')
     except ValueError:
-        address = None
+        private_key = None
 
     db_session = connectionmanager.database_session()
 
-    if address is None:
+    if private_key is None:
         new_account = wallet.create_account(user, db_session=db_session)
     else:
-        new_account = wallet.import_account(user, address, db_session=db_session)
+        new_account = wallet.import_account(user, private_key, db_session=db_session)
 
     with QueryDataPostProcessor() as pp:
         return pp.process(new_account.model).json()

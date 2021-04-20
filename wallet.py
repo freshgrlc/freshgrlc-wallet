@@ -5,6 +5,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import func
 
+from pycoin.ecdsa.secp256k1 import secp256k1_generator
+from pycoin.encoding.bytes32 import from_bytes_32
+from pycoin.key.Key import Key
+
 from coinsupport.addresscodecs import decode_base58_address, decode_privkey
 
 from coininfo import COINS, Coin
@@ -24,6 +28,9 @@ TXIN_VSIZES = {
     TXOUT_TYPES.P2PKH:  149,
     TXOUT_TYPES.P2WPKH: 68
 }
+
+
+PrivateKey = lambda raw_key: Key.make_subclass(None, secp256k1_generator)(from_bytes_32(raw_key))
 
 
 class AccountExistsException(Exception):
@@ -104,18 +111,21 @@ class Wallet(object):
     def create_account(self, name, db_session=None):
         return self.create_or_import_account(name, generate_key, db_session=db_session)
 
-    def import_account(self, name, address, db_session=None):
-        def decode(privkey, address):
-            for coin in COINS:
-                try:
-                    _, pubkeyhash = decode_base58_address(address.encode('utf-8'), verify_version=coin.address_version)
-                    _, privkey, _ = decode_privkey(privkey.encode('utf-8'), verify_version=coin.privkey_version)
-                    return privkey, pubkeyhash
-                except ValueError:
-                    continue
-            raise ValueError('Could not decode address or private key')
+    def import_account(self, name, private_key, db_session=None):
+        def decode():
+            def get_raw_private_key(private_key):
+                for coin in COINS:
+                    try:
+                        _, decoded, _ = decode_privkey(private_key.encode('utf-8'), verify_version=coin.privkey_version)
+                        return decoded
+                    except ValueError:
+                        continue
+                raise ValueError('Could not decode address or private key')
 
-        return self.create_or_import_account(name, lambda: decode(*address), db_session=db_session)
+            raw_key = get_raw_private_key(private_key)
+            return raw_key, PrivateKey(raw_key).hash160()
+
+        return self.create_or_import_account(name, decode, db_session=db_session)
 
     @property
     def _dbsession(self):

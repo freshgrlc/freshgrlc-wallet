@@ -72,6 +72,7 @@ CREATE TABLE `autopay` (
   `next` timestamp NOT NULL,
   PRIMARY KEY (`id`),
   KEY `autopay` (`account`,`coin`,`next`),
+  KEY `next_autopay` (`coin`,`next`),
   CONSTRAINT `fk_autopay_account` FOREIGN KEY (`account`) REFERENCES `account` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;

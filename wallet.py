@@ -15,7 +15,7 @@ from coininfo import COINS, Coin
 from connections import connectionmanager
 from keyseeder import generate_key
 from models import *
-from transaction import UnsignedTransactionBuilder, SignedTransaction, FEERATE_NETWORK, FEERATE_POOLSUBSIDY, TransactionInput as UnsignedTransactionInput
+from transaction import UnsignedTransactionBuilder, SignedTransaction, FEERATE_NETWORK, FEERATE_POOLSUBSIDY, TransactionInput as UnsignedTransactionInput, NotEnoughCoinsException
 from indexer import import_address
 from indexer.models import *
 
@@ -326,6 +326,43 @@ class WalletAddress(object):
 
         tx.add_return_output(destination_address)
         return self.sign_transaction(tx).broadcast()
+
+    def process_automatic_payment(self, destination_address, amount, zero_balance_payment=False):
+        utxos = self.utxos(include_unconfirmed=True, max_utxos=MAX_CONSOLIDATION_UTXOS)
+        balance = sum([ utxo['amount'] for utxo in utxos ])
+
+        try:
+            tx = UnsignedTransactionBuilder(self.coin, feerate=(FEERATE_NETWORK if not self.coin.allow_tx_subsidy else FEERATE_POOLSUBSIDY))
+            if zero_balance_payment:
+                if amount == 0.0:
+                    for utxo in utxos:
+                        tx.add(UnsignedTransactionInput(utxo))
+                    tx.add_return_output(destination_address)
+                else:
+                    immature_balance = self.balance(include_unconfirmed=True, include_immature=True)
+                    keep_amount = amount + balance - immature_balance
+                    if keep_amount <= 0.0:
+                        keep_amount = 0.0
+                    if keep_amount <= balance:
+                        for utxo in utxos:
+                            tx.add(UnsignedTransactionInput(utxo))
+                        tx.add_output(self.preferred_change_address, keep_amount)
+                        tx.add_return_output(destination_address)
+                    else:
+                        raise NotEnoughCoinsException('Automatic payment is set to keep at least %f, but balance is currently only %f' % (keep_amount, balance))
+            else:
+                if balance > amount:
+                    tx.add_output(destination_address, amount)
+                    tx.fund_transaction(utxos, self.preferred_change_address)
+                else:
+                    raise NotEnoughCoinsException('Automatic payment is set to %f, but balance is currently only %f' % (amount, balance))
+
+            if not tx.funded():
+                raise NotEnoughCoinsException('Automatic payment not funded while about to be signed (programming error?)')
+
+            return self.sign_transaction(tx)
+        except NotEnoughCoinsException as e:
+            print('Unable to fund/execute automatic payment transaction: %s' % e)
 
     def sign_transaction(self, transaction):
         daemon = self.daemon()

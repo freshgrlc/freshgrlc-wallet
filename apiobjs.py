@@ -1,7 +1,8 @@
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from coininfo import COINS
-from models import AccountAutoConsolidationInfo
+from models import AutomaticPayment
 
 
 class _NoDefault(object): pass
@@ -112,22 +113,19 @@ class SendRequest(object):
         self.priority == 'low'
 
 
-class SetConsolidationInfoRequest(object):
+class SetAutoPayInfoRequest(object):
     def __init__(self, json):
         self.address = str(get_value(json, 'address'))
-        self.minbalance = Decimal(get_value(json, 'minbalance'))
-        self.maxbalance = get_value(json, 'maxbalance', None)
-        self.interval = get_value(json, 'interval', None)
+        self.transaction = get_value(json, 'transaction')
+        self.interval = get_value(json, 'interval')
+        self.nextpayment = get_value(json, 'nextpayment', None)
         self.coin = None
         self.account = None
 
-        if self.maxbalance is not None:
-            self.maxbalance = Decimal(self.maxbalance)
-        if self.interval is not None:
-            self.interval = Decimal(self.interval)
-
-        if self.maxbalance is None and self.interval is None:
-            raise ValueError('Consolidation settings require either a balance- or interval-based trigger. Use DELETE to disable consolidation')
+        if self.nextpayment is None:
+            self.nextpayment = datetime.now()
+        else:
+            self.nextpayment = datetime(1970, 1, 1) + timedelta(seconds=int(self.nextpayment))
 
     def set_context_info(self, account, coin):
         self.account = account
@@ -137,11 +135,11 @@ class SetConsolidationInfoRequest(object):
             raise ValueError('Invalid address "%s" for %s' % (self.address, self.coin.ticker))
 
     def dbobject(self):
-        info = AccountAutoConsolidationInfo()
+        info = AutomaticPayment()
         info.account_id = self.account.model.id
         info.coin = self.coin.ticker
         info.address = self.address
-        info.minbalance = self.minbalance
-        info.maxbalance = self.maxbalance
+        info.transaction = self.transaction
         info.interval = self.interval
+        info.nextpayment = self.nextpayment
         return info

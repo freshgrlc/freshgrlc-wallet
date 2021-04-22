@@ -168,11 +168,7 @@ class WalletAddress(object):
             ).all() ]
         return self._addresses
 
-    def _preferred_address(self, forchange=False):
-        if not forchange:
-            consolidation_info = self.account.model.consolidationinfo_for(self.coin)
-            if consolidation_info != None and consolidation_info.isreceiveaddress:
-                return consolidation_info.address
+    def _preferred_address(self):
         return self.coin.get_default_receive_address(self.account.model.pubkeyhash)
 
     @property
@@ -181,7 +177,7 @@ class WalletAddress(object):
 
     @property
     def preferred_change_address(self):
-        return self._preferred_address(forchange=True)
+        return self._preferred_address()
 
     def daemon(self):
         return connectionmanager.coindaemon(self.coin)

@@ -7,9 +7,9 @@ from hashlib import sha256
 from httplib import NOT_FOUND, NO_CONTENT
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from time import time
+from time import time, sleep
 
-from apiobjs import SendRequest, SetConsolidationInfoRequest, get_value
+from apiobjs import SendRequest, SetAutoPayInfoRequest, get_value
 from coininfo import Coin, CoinNotDefinedException
 from connections import connectionmanager
 from models import AUTH_TOKEN_SIZE, WalletManager, Account, make_tx_ref
@@ -86,70 +86,94 @@ def get_account(manager, wallet, account, user):
         return pp.process(account.model).json()
 
 
-@webapp.route('/accounts/<user>/consolidationinfo/', methods=['GET'])
+@webapp.route('/accounts/<user>/autopayments/', methods=['GET'])
 @authenticate_manager
 @walletapi
-def get_account_consolidationinfo(manager, wallet, account, user):
+def get_account_autopayments(manager, wallet, account, user):
     with QueryDataPostProcessor() as pp:
-        return pp.process(account.model.consolidationinfo).json()
+        return pp.process_raw(account.model.autopayments).json()
 
 
-@webapp.route('/accounts/<user>/consolidationinfo/<coin>/', methods=['GET'])
+@webapp.route('/accounts/<user>/autopayments/<coin>/', methods=['GET'])
 @authenticate_manager
 @walletapi
-def get_account_coin_consolidationinfo(manager, wallet, account, user, coin):
+def get_account_coin_autopayments(manager, wallet, account, user, coin):
     with QueryDataPostProcessor() as pp:
         try:
             coin = Coin.by_ticker(coin)
         except CoinNotDefinedException:
             return pp.process_raw(None).json()
-        return pp.process(account.model.consolidationinfo_for(coin)).json()
+        return pp.process(account.model.autopayments_for(coin)).json()
 
 
-@webapp.route('/accounts/<user>/consolidationinfo/<coin>/', methods=['DELETE'])
+@webapp.route('/accounts/<user>/autopayments/<coin>/', methods=['DELETE'])
 @authenticate_manager
 @walletapi
-def delete_account_coin_consolidationinfo(manager, wallet, account, user, coin):
+def delete_account_coin_autopayments(manager, wallet, account, user, coin):
     try:
         coin = Coin.by_ticker(coin)
     except CoinNotDefinedException:
         return '', NO_CONTENT
 
-    current_value = account.model.consolidationinfo_for(coin)
-    if current_value == None:
+    current = account.model.autopayments_for(coin)
+    if len(current) == 0:
         return '', NO_CONTENT
 
     db = wallet._dbsession
-    db.delete(current_value)
+    for autopay_config in current:
+        db.delete(autopay_config)
     db.commit()
     return '', NO_CONTENT
 
 
-@webapp.route('/accounts/<user>/consolidationinfo/<coin>/', methods=['PUT'])
+@webapp.route('/accounts/<user>/autopayments/<coin>/', methods=['POST'])
 @authenticate_manager
 @walletapi
-def set_account_coin_consolidationinfo(manager, wallet, account, user, coin):
+def add_account_coin_autopayment(manager, wallet, account, user, coin):
     try:
         coin = Coin.by_ticker(coin)
     except CoinNotDefinedException:
         return '', NOT_FOUND
 
-    requestobj = SetConsolidationInfoRequest(request.get_json())
-    requestobj.set_context_info(account=account, coin=coin)
+    autopayment_info = SetAutoPayInfoRequest(request.get_json())
+    autopayment_info.set_context_info(account=account, coin=coin)
 
     db = wallet._dbsession
 
-    current_value = account.model.consolidationinfo_for(coin)
-    if current_value != None:
-        db.delete(current_value)
-        db.flush()
-
-    consolidationinfo = requestobj.dbobject()
-    db.add(consolidationinfo)
+    autopayment = autopayment_info.dbobject()
+    db.add(autopayment)
     db.commit()
 
     with QueryDataPostProcessor() as pp:
-        return pp.process(consolidationinfo).json()
+        return pp.process(autopayment).json()
+
+
+@webapp.route('/accounts/<user>/autopayments/<coin>/', methods=['PUT'])
+@authenticate_manager
+@walletapi
+def set_account_coin_autopayments(manager, wallet, account, user, coin):
+    try:
+        coin = Coin.by_ticker(coin)
+    except CoinNotDefinedException:
+        return '', NOT_FOUND
+
+    db = wallet._dbsession
+
+    for autopayment in account.model.autopayments_for(coin):
+        db.delete(autopayment)
+
+    autopayments = []
+    for info in request.get_json():
+        autopayment_info = SetAutoPayInfoRequest(info)
+        autopayment_info.set_context_info(account=account, coin=coin)
+        autopayment = autopayment_info.dbobject()
+        db.add(autopayment)
+        autopayments.append(autopayment)
+
+    db.commit()
+
+    with QueryDataPostProcessor() as pp:
+        return pp.process(autopayments).json()
 
 
 @webapp.route('/accounts/<user>/send/', methods=['POST'])
@@ -169,6 +193,7 @@ def send(manager, wallet, account, user):
     tx_internal_id = None
 
     while time() < sent + 10:
+        sleep(0.5)
         db.rollback()
         txobj = db.query(Transaction).filter(Transaction.txid == txid_raw).first()
         if txobj != None:

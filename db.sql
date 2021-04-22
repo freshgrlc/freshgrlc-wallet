@@ -67,11 +67,11 @@ CREATE TABLE `autopay` (
   `coin` varchar(5) NOT NULL,
   `pubkeyhash` binary(20) NOT NULL,
   `type` tinyint(4) NOT NULL,
-  `minbalance` decimal(16,8) NOT NULL DEFAULT '0.00000000',
-  `maxbalance` decimal(16,8) DEFAULT NULL,
+  `amount` decimal(16,8),
   `interval` int(11) DEFAULT NULL,
+  `next` timestamp NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `autopay` (`account`,`coin`),
+  KEY `autopay` (`account`,`coin`,`next`),
   CONSTRAINT `fk_autopay_account` FOREIGN KEY (`account`) REFERENCES `account` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;

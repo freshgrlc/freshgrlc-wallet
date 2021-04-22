@@ -2,7 +2,7 @@ import os
 
 from binascii import unhexlify
 from Crypto.Cipher import AES
-from sqlalchemy import BINARY as Binary, Column, Float, ForeignKey, Integer, MetaData, String
+from sqlalchemy import BINARY as Binary, Column, Float, ForeignKey, Integer, MetaData, String, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
@@ -11,6 +11,7 @@ import config
 from coininfo import Coin, COINS
 from connections import connectionmanager
 from indexer.models import Address, TXOUT_TYPES
+from indexer.postprocessor import convert_date
 
 
 AUTH_TOKEN_SIZE = 64
@@ -43,7 +44,7 @@ class Account(Base):
     pubkeyhash = Column(Binary(20))
 
     addresses = relationship('AccountAddress', back_populates='account', cascade='save-update, merge, delete')
-    _consolidationinfo = relationship('AccountAutoConsolidationInfo', back_populates='account', cascade='save-update, merge, delete')
+    raw_autopayments = relationship('AutomaticPayment', back_populates='account', cascade='save-update, merge, delete')
     manager = relationship('WalletManager', back_populates='accounts')
 
     @property
@@ -58,21 +59,21 @@ class Account(Base):
         self.encrypted_key = cipher.encrypt(value)
 
     @property
-    def consolidationinfo(self):
-        consolidationinfo = { coin.ticker: None for coin in COINS }
-        for info in self._consolidationinfo:
-            consolidationinfo[info.coin] = info
-        return consolidationinfo
+    def autopayments(self):
+        autopayments = { coin.ticker: [] for coin in Coin.coins }
+        for autopayment in self.raw_autopayments:
+            autopayments[autopayment.coin].append(autopayment._as_dict())
+        return autopayments
 
-    def consolidationinfo_for(self, coin):
+    def autopayments_for(self, coin):
         return Session.object_session(self).query(
-            AccountAutoConsolidationInfo
+            AutomaticPayment
         ).filter(
-            AccountAutoConsolidationInfo.account_id == self.id,
-            AccountAutoConsolidationInfo.coin == coin.ticker
-        ).first()
+            AutomaticPayment.account_id == self.id,
+            AutomaticPayment.coin == coin.ticker
+        ).all()
 
-    API_DATA_FIELDS = [ user, 'Account.consolidationinfo' ]
+    API_DATA_FIELDS = [ user, 'Account.autopayments' ]
     POSTPROCESS_RESOLVE_FOREIGN_KEYS = [ addresses ]
 
 
@@ -117,16 +118,16 @@ class AccountAddress(Base):
         return make_address_ref(self) if self.address_info != None else None
 
     @property
-    def consolidationinfo(self):
+    def autopayments(self):
         return Session.object_session(self).query(
-            AccountAutoConsolidationInfo
+            AutomaticPayment
         ).filter(
-            AccountAutoConsolidationInfo.account_id == self.account_id,
-            AccountAutoConsolidationInfo.coin == self.coin
+            AutomaticPayment.account_id == self.account_id,
+            AutomaticPayment.coin == self.coin
         ).first()
 
 
-class AccountAutoConsolidationInfo(Base):
+class AutomaticPayment(Base):
     __tablename__ = 'autopay'
 
     id = Column(Integer, primary_key=True)
@@ -134,16 +135,24 @@ class AccountAutoConsolidationInfo(Base):
     coin = Column(String(5))
     pubkeyhash = Column(Binary(20))
     txout_type_id = Column('type', Integer)
-    minbalance = Column(Float(asdecimal=True))
-    maxbalance = Column(Float(asdecimal=True))
+    amount = Column(Float(asdecimal=True))
     interval = Column(Integer)
+    nextpayment = Column('next', DateTime)
 
-    account = relationship('Account', back_populates='_consolidationinfo')
+    account = relationship('Account', back_populates='raw_autopayments')
 
     API_DATA_FIELDS = [
-        'AccountAutoConsolidationInfo.address', 'AccountAutoConsolidationInfo.isreceiveaddress',
-        minbalance, maxbalance, interval
+        'AutomaticPayment.address', 'AutomaticPayment.transaction', 'AutomaticPayment.nextpayment',
+        interval
     ]
+
+    def _as_dict(self):
+        return {
+            'address': self.address,
+            'transaction': self.transaction,
+            'interval': self.interval,
+            'nextpayment': convert_date(self.nextpayment)
+        }
 
     @property
     def txout_type(self):
@@ -166,8 +175,35 @@ class AccountAutoConsolidationInfo(Base):
         self.txout_type = txout_type
 
     @property
-    def isreceiveaddress(self):
-        return self.maxbalance == 0.0
+    def is_zero_balancing(self):
+        return self.amount <= 0.0
+
+    @property
+    def transaction(self):
+        if not self.is_zero_balancing:
+            return { 'type': 'standard', 'amount': self.amount }
+        return { 'type': 'zero-balance', 'amountToKeep': -self.amount }
+
+    @transaction.setter
+    def transaction(self, info):
+        def invalid():
+            raise ValueError('Invalid autopay transaction info: %s' % info)
+
+        if type(info) != dict:
+            invalid()
+
+        if 'type' not in info and 'amount' not in info:
+            invalid()
+
+        if 'type' in info and info['type'] not in ('standard', 'zero-balance'):
+            invalid()
+
+        if 'type' not in info or info['type'] == 'standard':
+            if not 'amount' in info:
+                invalid()
+            self.amount = info['amount']
+        else:
+            self.amount = -info['amountToKeep'] if 'amountToKeep' in info else 0.0
 
 
 class WalletManager(Base):

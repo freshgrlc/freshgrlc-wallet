@@ -136,7 +136,11 @@ class UnsignedTransactionBuilder(object):
         pubkeyhash, output_type = self.coin.decode_address_and_type(address)
         return_tx = TransactionOutput(pubkeyhash, output_type, 0)
         self.add(return_tx)
-        return_tx.set_amount(self.total_in() - self.total_out() - self.required_fee())
+        return_amount = self.total_in() - self.total_out() - self.required_fee()
+        if return_amount > DUST_LIMIT:
+            return_tx.set_amount(self.total_in() - self.total_out() - self.required_fee())
+        else:
+            raise NotEnoughCoinsException('Not enough funds to fund return output (current: %f, dust limit: %f)' % (return_amount, DUST_LIMIT))
 
         if not self.fee_is_sane():
             raise FeeCalculationError()

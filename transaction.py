@@ -1,10 +1,13 @@
 from binascii import unhexlify
 from decimal import Decimal
 from struct import pack
+from time import time, sleep
 
 from coinsupport.opcodes import *
 
-from indexer.models import TXOUT_TYPES
+from indexer.models import Transaction, TXOUT_TYPES
+
+from connections import connectionmanager
 
 
 FEERATE_NETWORK = Decimal('0.001')
@@ -20,6 +23,9 @@ class FeeCalculationError(Exception):
     pass
 
 class NotEnoughCoinsException(Exception):
+    pass
+
+class TimeoutException(Exception):
     pass
 
 
@@ -210,6 +216,7 @@ class UnsignedTransactionBuilder(object):
 
 class SignedTransaction(object):
     def __init__(self, unsigned_tx_info, raw_signed_tx, coindaemon=None):
+        self.coin = unsigned_tx_info.coin
         self.inputs = unsigned_tx_info.inputs
         self.outputs = unsigned_tx_info.outputs
         self.total_in = unsigned_tx_info.total_in()
@@ -222,7 +229,40 @@ class SignedTransaction(object):
         self.size = len(self.raw)
         self.actual_feerate = self.fee / self.size * 1000
         self.coindaemon = coindaemon
+        self.txid = None
+        self._seen = False
+        self._db_tx_id = None
 
-    def broadcast(self, coindaemon=None):
-        return (coindaemon if coindaemon is not None else self.coindaemon).sendrawtransaction(self.hex)
+    def broadcast(self, coindaemon=None, wait_until_seen_on_network=False):
+        self.txid = (coindaemon if coindaemon is not None else self.coindaemon).sendrawtransaction(self.hex)
+
+        if wait_until_seen_on_network:
+            self.wait_until_seen_on_network()
+
+        return self.txid
+
+    def is_seen_on_network(self, dbsession):
+        if self._seen:
+            return True
+
+        txid_raw = unhexlify(self.txid)
+        txobj = dbsession.query(Transaction).filter(Transaction.txid == txid_raw).first()
+        if txobj == None:
+            return False
+
+        self._seen = True
+        self._db_tx_id = txobj.id
+        return True
+
+    def wait_until_seen_on_network(self, timeout=10, check_interval=0.5):
+        start_time = time()
+        db = connectionmanager.database_session(coin=self.coin)
+
+        while time() < start_time + timeout:
+            sleep(check_interval)
+            db.rollback()
+            if self.is_seen_on_network(db):
+                return
+
+        raise TimeoutException()
 

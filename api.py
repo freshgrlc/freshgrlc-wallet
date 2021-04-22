@@ -13,6 +13,7 @@ from apiobjs import SendRequest, SetAutoPayInfoRequest, get_value
 from coininfo import Coin, CoinNotDefinedException
 from connections import connectionmanager
 from models import AUTH_TOKEN_SIZE, WalletManager, Account, make_tx_ref
+from transaction import TimeoutException
 from wallet import Wallet
 
 from indexer.models import Transaction
@@ -185,22 +186,10 @@ def send(manager, wallet, account, user):
     requestobj.destination.set_context_info(wallet=wallet, coin=sender.coin)
 
     tx = sender.transaction(requestobj.destination.address, requestobj.amount, spend_unconfirmed=True, subsidized=requestobj.low_priority)
-    txid = tx.broadcast()
-    txid_raw = unhexlify(txid)
-    sent = time()
 
-    db = connectionmanager.database_session(coin=sender.coin)
-    tx_internal_id = None
-
-    while time() < sent + 10:
-        sleep(0.5)
-        db.rollback()
-        txobj = db.query(Transaction).filter(Transaction.txid == txid_raw).first()
-        if txobj != None:
-            tx_internal_id = txobj.id
-            break
-
-    if tx_internal_id is None:
+    try:
+        txid = tx.broadcast(wait_until_seen_on_network=True)
+    except TimeoutException:
         raise APIException('Transaction created but not seen on network after 10 seconds')
 
     with QueryDataPostProcessor() as pp:

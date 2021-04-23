@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 
 from coinsupport import Daemon
 
@@ -20,7 +21,7 @@ class ConnectionManager(object):
     def database_session(self, coin=None):
         database_name = config.DATABASE_WALLET_DB if coin is None else coin.db_table
         if not database_name in self.db_engines:
-            self.db_engines[database_name] = create_engine(self.database_url(database_name), encoding='utf8', echo=self.sql_debug)
+            self.db_engines[database_name] = create_engine(self.database_url(database_name), connect_args={'connect_timeout': 30}, poolclass=NullPool, encoding='utf8', echo=self.sql_debug)
         return sessionmaker(self.db_engines[database_name])()
 
     @staticmethod

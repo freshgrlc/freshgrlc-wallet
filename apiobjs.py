@@ -97,7 +97,7 @@ Destination.register(AddressDestination)
 class SendRequest(object):
     def __init__(self, json):
         self.destination = Destination.parse(get_value(json, 'destination'))
-        self.coin = str(get_value(json, 'coin'))
+        self.coin = str(get_value(json, 'coin')).lower()
         self.amount = Decimal(get_value(json, 'amount'))
         self.priority = str(get_value(json, 'priority', 'normal')).lower()
 

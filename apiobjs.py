@@ -83,7 +83,7 @@ class AddressDestination(Destination):
 
     def __init__(self, json):
         super(AddressDestination, self).__init__()
-        self.address = get_value(json, 'address')
+        self.address = str(get_value(json, 'address'))
 
     def __iter__(self):
         yield 'type', self.TYPE

@@ -1,10 +1,11 @@
 import functools
+import json
 
 from base64 import b64decode
 from binascii import unhexlify
-from flask import Flask, abort, request
+from flask import Flask, abort, request, Response
 from hashlib import sha256
-from httplib import NOT_FOUND, NO_CONTENT
+from httplib import NO_CONTENT, BAD_REQUEST, UNAUTHORIZED, NOT_FOUND, INTERNAL_SERVER_ERROR
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from time import time, sleep
@@ -13,18 +14,47 @@ from apiobjs import SendRequest, SetAutoPayInfoRequest, get_value
 from coininfo import Coin, CoinNotDefinedException
 from connections import connectionmanager
 from models import AUTH_TOKEN_SIZE, WalletManager, Account, make_tx_ref
-from transaction import TimeoutException
 from wallet import Wallet
 
 from indexer.models import Transaction
 from indexer.postprocessor import QueryDataPostProcessor
 
 
-class APIException(Exception):
-    pass
-
-
 webapp = Flask('wallet-api')
+
+
+def _json(obj, code=200):
+    return Response(json.dumps(obj), code, mimetype='application/json')
+
+
+def exception_handler(error, code):
+    try:
+        error = error.original_exception
+    except AttributeError: pass
+    return _json({
+        'code': code,
+        'error': {
+            'type': error.__class__.__name__,
+            'message': str(error)
+        }
+    }, code)
+
+@webapp.errorhandler(BAD_REQUEST)
+def handle_bad_request(e):
+    return exception_handler(e, BAD_REQUEST)
+
+@webapp.errorhandler(UNAUTHORIZED)
+def handle_bad_request(e):
+    return exception_handler(e, UNAUTHORIZED)
+
+@webapp.errorhandler(INTERNAL_SERVER_ERROR)
+def handle_bad_request(e):
+    return exception_handler(e, INTERNAL_SERVER_ERROR)
+
+@webapp.errorhandler(NOT_FOUND)
+def not_found_handler(_):
+    return _json(None, NOT_FOUND)
+
 
 
 def authenticate_manager(api_func):
@@ -186,11 +216,7 @@ def send(manager, wallet, account, user):
     requestobj.destination.set_context_info(wallet=wallet, coin=sender.coin)
 
     tx = sender.transaction(requestobj.destination.address, requestobj.amount, spend_unconfirmed=True, subsidized=requestobj.low_priority)
-
-    try:
-        txid = tx.broadcast(wait_until_seen_on_network=True)
-    except TimeoutException:
-        raise APIException('Transaction created but not seen on network after 10 seconds')
+    txid = tx.broadcast(wait_until_seen_on_network=True)
 
     with QueryDataPostProcessor() as pp:
         return pp.process_raw({

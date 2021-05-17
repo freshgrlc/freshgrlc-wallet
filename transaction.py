@@ -3,6 +3,7 @@ from decimal import Decimal
 from struct import pack
 from time import time, sleep
 
+from coinsupport.daemon import JSONRPCException
 from coinsupport.opcodes import *
 
 from indexer.models import Transaction, TXOUT_TYPES
@@ -25,7 +26,7 @@ class FeeCalculationError(Exception):
 class NotEnoughCoinsException(Exception):
     pass
 
-class TimeoutException(Exception):
+class TransactionBroadcastException(Exception):
     pass
 
 
@@ -234,7 +235,10 @@ class SignedTransaction(object):
         self._db_tx_id = None
 
     def broadcast(self, coindaemon=None, wait_until_seen_on_network=False):
-        self.txid = (coindaemon if coindaemon is not None else self.coindaemon).sendrawtransaction(self.hex)
+        try:
+            self.txid = (coindaemon if coindaemon is not None else self.coindaemon).sendrawtransaction(self.hex)
+        except JSONRPCException as e:
+            raise TransactionBroadcastException('Could not broadcast transaction to network: Node responded with "%s"' % e)
 
         if wait_until_seen_on_network:
             self.wait_until_seen_on_network()
@@ -264,5 +268,5 @@ class SignedTransaction(object):
             if self.is_seen_on_network(db):
                 return
 
-        raise TimeoutException()
+        raise TransactionBroadcastException('Transaction was broadcasted, but not seen on network after %d seconds' % timeout)
 

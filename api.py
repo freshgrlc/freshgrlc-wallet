@@ -40,15 +40,15 @@ def exception_handler(error, code):
     }, code)
 
 @webapp.errorhandler(BAD_REQUEST)
-def handle_bad_request(e):
+def bad_request_handler(e):
     return exception_handler(e, BAD_REQUEST)
 
 @webapp.errorhandler(UNAUTHORIZED)
-def handle_bad_request(e):
+def unauthorized_handler(e):
     return exception_handler(e, UNAUTHORIZED)
 
 @webapp.errorhandler(INTERNAL_SERVER_ERROR)
-def handle_bad_request(e):
+def internal_server_error_handler(e):
     return exception_handler(e, INTERNAL_SERVER_ERROR)
 
 @webapp.errorhandler(NOT_FOUND)

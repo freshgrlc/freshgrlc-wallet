@@ -194,17 +194,11 @@ class WalletAddress(object):
                 ).join(
                     TransactionOutput.spenders,
                     isouter=True
-                ).join(
-                    Transaction.blockreferences,
-                    isouter=True
                 ).filter(
                     Address.id.in_(self.address_ids),
                     TransactionOutput.spentby_id == None,
                     TransactionInput.id == None,
-                    or_(
-                        BlockTransaction.block_id == None,
-                        Transaction.confirmation_id != None
-                    )
+                    Transaction.doublespends_id == None
                 )
             )
 
@@ -227,6 +221,7 @@ class WalletAddress(object):
                     Address.id.in_(self.address_ids),
                     TransactionOutput.spentby_id == None,
                     TransactionInput.id == None,
+                    Transaction.doublespends_id == None,
                     or_(
                         CoinbaseInfo.block_id == None,
                         Block.height <= self.coin.current_coinbase_confirmation_height()

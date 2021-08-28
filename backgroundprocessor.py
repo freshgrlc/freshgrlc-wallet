@@ -12,6 +12,9 @@ from wallet import WalletAccount, MIN_CONSOLIDATION_UTXOS, MAX_CONSOLIDATION_UTX
 from indexer.logger import log_event
 from indexer.models import Address, Block, CoinbaseInfo, Transaction, TransactionInput, TransactionOutput
 from indexer.postprocessor import convert_date
+from indexer.pidfile import make_pidfile
+
+import wallet as __main__
 
 
 MAX_QUEUED_TXS = 8
@@ -170,6 +173,8 @@ def main():
                 log_event('Check', 'Chn', coin.ticker, '%d entries in mempool, max = %d' % (txs_queued, MAX_QUEUED_TXS))
                 run_background_tasks_for_coin(coin, session, max_work=max_work)
                 log_event('Finish', 'Chn', coin.ticker)
+
+            make_pidfile(__main__)
 
         except KeyboardInterrupt:
             return

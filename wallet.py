@@ -1,5 +1,6 @@
 from base64 import b64decode
 from binascii import hexlify, unhexlify
+from gevent.lock import BoundedSemaphore as Lock
 from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.session import Session
@@ -42,6 +43,9 @@ class InvalidAccountName(Exception):
 
 
 class Wallet(object):
+    account_create_lock = Lock()
+    tx_create_lock = Lock()
+
     def __init__(self, manager):
         self.manager = manager
 
@@ -64,49 +68,50 @@ class Wallet(object):
         if type(name) not in (str, unicode) or len(name.encode('utf-8')) > ACCOUNT_NAME_LEN:
             raise InvalidAccountName(name)
 
-        db = db_session if db_session is not None else connectionmanager.database_session()
-        existing_account = db.query(Account).filter(
-            Account.manager_id == self.manager.id,
-            Account.user == name
-        ).first()
+        with self.account_create_lock:
+            db = db_session if db_session is not None else connectionmanager.database_session()
+            existing_account = db.query(Account).filter(
+                Account.manager_id == self.manager.id,
+                Account.user == name
+            ).first()
 
-        if existing_account != None:
-            raise AccountExistsException(name)
+            if existing_account != None:
+                raise AccountExistsException(name)
 
-        account = Account()
-        account.manager_id = self.manager.id
-        account.user = name
+            account = Account()
+            account.manager_id = self.manager.id
+            account.user = name
 
-        privkey, pubkeyhash = get_key_cb()
-        account.private_key = privkey
-        account.pubkeyhash = pubkeyhash
+            privkey, pubkeyhash = get_key_cb()
+            account.private_key = privkey
+            account.pubkeyhash = pubkeyhash
 
-        db.add(account)
-        db.flush()
+            db.add(account)
+            db.flush()
 
-        for coin in COINS:
-            try:
-                addresses = coin.get_addresses_for_pubkeyhash(pubkeyhash)
-                coin_db = connectionmanager.database_session(coin)
-                coin_daemon = connectionmanager.coindaemon(coin)
+            for coin in COINS:
+                try:
+                    addresses = coin.get_addresses_for_pubkeyhash(pubkeyhash)
+                    coin_db = connectionmanager.database_session(coin)
+                    coin_daemon = connectionmanager.coindaemon(coin)
 
-                for address_id in [ import_address(address, dbsession=coin_db, daemon=coin_daemon) for address in addresses ]:
-                    account_address = AccountAddress()
-                    account_address.account_id = account.id
-                    account_address.coin = coin.ticker
-                    account_address.address_id = address_id
-                    db.add(account_address)
+                    for address_id in [ import_address(address, dbsession=coin_db, daemon=coin_daemon) for address in addresses ]:
+                        account_address = AccountAddress()
+                        account_address.account_id = account.id
+                        account_address.coin = coin.ticker
+                        account_address.address_id = address_id
+                        db.add(account_address)
 
-                coin_db.commit()
-            except Exception as e:
-                print('Failed to import %s addresses for new account "%s": %s' % (coin.ticker, name, e))
-                coin_db.rollback()
-                db.rollback()
-                raise
+                    coin_db.commit()
+                except Exception as e:
+                    print('Failed to import %s addresses for new account "%s": %s' % (coin.ticker, name, e))
+                    coin_db.rollback()
+                    db.rollback()
+                    raise
 
-        db.flush()
-        db.commit()
-        return WalletAccount(self, account)
+            db.flush()
+            db.commit()
+            return WalletAccount(self, account)
 
     def create_account(self, name, db_session=None):
         return self.create_or_import_account(name, generate_key, db_session=db_session)
@@ -307,8 +312,10 @@ class WalletAddress(object):
 
         tx = UnsignedTransactionBuilder(self.coin, feerate=(FEERATE_NETWORK if not subsidized or not self.coin.allow_tx_subsidy else FEERATE_POOLSUBSIDY))
         tx.add_output(destination_address, amount)
-        tx.fund_transaction(self.utxos(include_unconfirmed=spend_unconfirmed), return_address)
-        return self.sign_transaction(tx)
+
+        with self.account.wallet.tx_create_lock:
+            tx.fund_transaction(self.utxos(include_unconfirmed=spend_unconfirmed), return_address)
+            return self.sign_transaction(tx)
 
     def consolidate(self, destination_address=None, include_unconfirmed=False, subsidized=False, max_utxos=MAX_CONSOLIDATION_UTXOS):
         if destination_address is None:

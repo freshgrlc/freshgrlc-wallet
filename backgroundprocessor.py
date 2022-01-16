@@ -144,6 +144,7 @@ def run_background_tasks_for_coin(coin, dbsession, max_work=MAX_QUEUED_TXS):
 
 def main():
     STATE = { coin.ticker: CoinState() for coin in COINS }
+    wrote_pidfile = False
 
     while True:
         sleep(10)
@@ -174,7 +175,9 @@ def main():
                 run_background_tasks_for_coin(coin, session, max_work=max_work)
                 log_event('Finish', 'Chn', coin.ticker)
 
-            make_pidfile(__main__)
+            if not wrote_pidfile:
+                make_pidfile(__main__)
+                wrote_pidfile = True
 
         except KeyboardInterrupt:
             return

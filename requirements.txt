@@ -15,5 +15,5 @@ scandir==1.10.0
 six==1.15.0
 SQLAlchemy==1.4.9
 uWSGI==2.0.19.1
-Werkzeug==1.0.1
+Werkzeug==2.2.3
 zipp==1.2.0
